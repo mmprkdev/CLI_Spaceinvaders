@@ -1,0 +1,7 @@
+﻿  SpaceInvaders2.cpp
+c:\users\matt\source\repos\cpp_projects\spaceinvaders2\spaceinvaders2\spaceinvaders2.cpp(44): warning C4018: '<': signed/unsigned mismatch
+c:\users\matt\source\repos\cpp_projects\spaceinvaders2\spaceinvaders2\spaceinvaders2.cpp(80): warning C4018: '<': signed/unsigned mismatch
+c:\users\matt\source\repos\cpp_projects\spaceinvaders2\spaceinvaders2\spaceinvaders2.cpp(109): warning C4018: '<': signed/unsigned mismatch
+c:\users\matt\source\repos\cpp_projects\spaceinvaders2\spaceinvaders2\spaceinvaders2.cpp(183): warning C4018: '<': signed/unsigned mismatch
+  SpaceInvaders2.vcxproj -> C:\Users\Matt\source\repos\CPP_Projects\SpaceInvaders2\Debug\SpaceInvaders2.exe
+  SpaceInvaders2.vcxproj -> C:\Users\Matt\source\repos\CPP_Projects\SpaceInvaders2\Debug\SpaceInvaders2.pdb (Partial PDB)
