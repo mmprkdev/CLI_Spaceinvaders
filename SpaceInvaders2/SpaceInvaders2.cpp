@@ -3,15 +3,16 @@
 // His github: https://www.github.com/onelonecoder
 //
 
-// TODO: Handle spaces in the enemyRow. Enemy rows where the leading edge
-// is a space ('.') are phasing through the boundary.
+// TODO: 
+// - Decrease player projectile rate of fire
+// - add multiple enemy rows
 
 #include "stdafx.h"
 #include <windows.h>
 #include <stdio.h>
 #include <thread>
 #include <vector>
-#include <intrin.h>    // call __debugbreak() in code to set a breakpoint in code
+#include <intrin.h>    // call __debugbreak() to set a breakpoint in code
 using namespace std;
 
 
@@ -23,13 +24,18 @@ int playerY = fieldHeight - 2;
 wstring enemyRow;
 int enemyRowX = 2;
 int enemyRowY = 2;
-int enemySpeed = 1;
+const int enemySpeed = 1;     // NOTE(Matt): changing the enemy speed will mess up the move logic  
+int fieldXOffset = 20;		  // offset of the field
+int screenWidth = 80;         // Console screen size X
+int screenHeight = 30;        // Console screen size Y
+wchar_t *screen = new wchar_t[screenWidth * screenHeight];
+
 
 struct projectile
 {
 	int posX;
 	int posY;
-	int velocity; // speed at which the projectile moves up (it can only move up)
+	int velocity; // speed at which the projectile moves up
 
 	projectile(int PosX, int PosY, int Speed)
 	{
@@ -41,7 +47,7 @@ struct projectile
 
 void KillEnemy(int posX, int posY)
 {
-	for (int ei = 0; ei < enemyRow.length(); ei++)
+	for (int ei = 0; ei < int(enemyRow.length()); ei++)
 	{
 		int fi = posY * fieldWidth + posX;
 		int enemyRowIndex = enemyRowY * fieldWidth + enemyRowX;
@@ -49,35 +55,39 @@ void KillEnemy(int posX, int posY)
 	}
 }
 
-bool CanFit(int posX, int posY)
+bool CanPlayerFit(int posX, int posY)
 {
-	int fieldIndex = posY * fieldWidth + posX;
+	//int fieldIndex = posY * fieldWidth + posX;
 	if (posX >= 0 && posX < fieldWidth)
 		if (posY >= 0 && posY < fieldHeight)
-			if (field[fieldIndex] != 0) return false;
+			if (screen[posY * screenWidth + (posX + fieldXOffset)] != ' ') return false; //if (field[fieldIndex] != 0) return false;
 
 	return true;
 }
 
-
 bool CanProjectileFit(int posX, int posY)
 {
-	int fieldIndex = posY * fieldWidth + posX;
+	//int fieldIndex = posY * fieldWidth + posX;
 	if (posX >= 0 && posX < fieldWidth)
+	{
 		if (posY >= 0 && posY < fieldHeight)
-			if (field[fieldIndex] == 2)
+		{
+			if (screen[posY * screenWidth + (posX + fieldXOffset)] == 'E')
 			{
-				KillEnemy(posX, posY); // get the index of the enemyRow, turn that element into a '.'
+				KillEnemy(posX, posY);
 				return false;
 			}
-			else if (field[fieldIndex] != 0) return false;
 
-			return true;
+			if (screen[posY * screenWidth + (posX + fieldXOffset)] == '#') return false;
+		}
+	}
+
+	return true;
 }
 
 bool CanEnemyFit(int posX, int posY)
 {
-	for (int ei = 0; ei < enemyRow.length(); ei++)
+	for (int ei = 0; ei < int(enemyRow.length()); ei++)
 	{
 		// Get the index into the field
 		int fi = posY * fieldWidth + (posX + ei);
@@ -85,102 +95,77 @@ bool CanEnemyFit(int posX, int posY)
 		// In bounds check
 		if ((posX + ei) >= 0 && (posX + ei) < fieldWidth)
 			if (posY >= 0 && posY < fieldHeight)
+			{
 				if (enemyRow[ei] != L'.')
 					if (field[fi] == 1 || field[fi] == 3) return false; // Check for collision with boundary or player
+			}
 	}
 
 	return true;
 }
 
-
-void UpdateField(vector<projectile> *projectiles)
-{
-	for (int x = 0; x < fieldWidth; x++)
-		for (int y = 0; y < fieldHeight; y++)
-		{
-			field[y * fieldWidth + x] = 0; // Set all field numbers back to 0 (blank space)
-
-			if (x == 0 || y == 0 || x == fieldWidth - 1 || y == fieldHeight - 1) // Set the boundary
-				field[y * fieldWidth + x] = 3;
-
-			if (x == playerX && y == playerY) // Set the player
-				field[y * fieldWidth + x] = 1;
-
-			for (int i = 0; i < enemyRow.length(); i++) // Set the enemy row
-			{
-				if (x == enemyRowX + i && y == enemyRowY)
-				{
-					if (enemyRow[i] == L'.')
-					{
-						field[y * fieldWidth + x] = 0;
-					}
-					else field[y * fieldWidth + x] = 2;
-				}
-			}
-
-			if (projectiles->size() > 0) // Set the projectiles
-				for each (auto p in *projectiles)
-					if (x == p.posX && y == p.posY) field[y * fieldWidth + x] = 4;
-		}
-}
-
 int main()
 {
 	bool key[3];
-	int screenWidth = 80;         // Console screen size X
-	int screenHeight = 30;        // Console screen size Y
-	int fieldXOffset = 20;
 	bool running = true;
 	vector<projectile> projectiles;
-	int projCount = 0;
-	//wstring enemyRows[5];
+	int playerProjCount = 0;
 	bool enemyInversed = false;
 	int enemyCount = 0;
+	int enemySpeedLimit = 2;
+	vector<projectile> enemyProjectiles;
+	int enemyProjCount = 0;
+	int enemyProjFireRate = 10;
 
-	// Create screen buffer
-	wchar_t *screen = new wchar_t[screenWidth * screenHeight];
+	// Fill the screen buffer with empty space chars
 	for (int i = 0; i < screenWidth * screenHeight; i++) screen[i] = L' ';
 	HANDLE console = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
 	SetConsoleActiveScreenBuffer(console);
 	DWORD bytesWritten = 0;
 
-	enemyRow = L"XXXXXXXX.XX";
+	enemyRow = L"XXXXXXXXXXX";
 
 	// Create playfield buffer
 	field = new unsigned char[fieldWidth * fieldHeight];
+	// Assign boarder number code
+	// NOTE(Matt): The integer codes are only being used to draw the field and any other 'perminate' additions 
+	// to the field. Otherwise we are just drawing the charicters directly to the screen. 
+	for (int x = 0; x < fieldWidth; x++)
+		for (int y = 0; y < fieldHeight; y++)
+			field[y * fieldWidth + x] = (x == 0 || x == fieldWidth - 1 || y == fieldHeight - 1 || y == 0) ? 3 : 0;
 
 	while (running)
 	{
 		// Timing ========================================================================================
 		this_thread::sleep_for(50ms); // Small Step = 1 Game Tick
 
-									  // Input ========================================================================================
+		// Input =========================================================================================
 		for (int i = 0; i < 4; i++)                             // R   L   SB 
 			key[i] = (0x8000 & GetAsyncKeyState((unsigned char)("\x27\x25\x20"[i]))) != 0;
 
-		// Game Logic ========================================================================================
-
+		// Game Logic ====================================================================================
+		
 		// Handle player movement
-		if (key[0] && CanFit(playerX + 1, playerY)) playerX += 1;
-		if (key[1] && CanFit(playerX - 1, playerY)) playerX -= 1;
+		if (key[0] && CanPlayerFit(playerX + 1, playerY)) playerX += 1;
+		if (key[1] && CanPlayerFit(playerX - 1, playerY)) playerX -= 1;
 
 		// Prevent more than one projectile from being created per spacebar press. Set the ceiling at 2.
-		if (projCount < 3)
+		if (playerProjCount < 3)
 		{
-			if (key[2]) projCount += 1;
-			else projCount = 0;
+			if (key[2]) playerProjCount += 1;
+			else playerProjCount = 0;
 		}
 		else
-			projCount -= 1;
+			playerProjCount -= 1;
 
-		if (key[2] && (projCount == 1))
+		if (key[2] && (playerProjCount == 1))
 		{
 			projectile p = projectile(playerX, playerY, 1);
 			projectiles.push_back(p);
 		}
 
-		// Update projectile movement
-		for (int i = 0; i < projectiles.size(); i++)
+		// Update player projectile movement
+		for (int i = 0; i < int(projectiles.size()); i++)
 		{
 			if (CanProjectileFit(projectiles[i].posX, projectiles[i].posY - 1))
 			{
@@ -190,10 +175,18 @@ int main()
 				projectiles.erase(projectiles.begin() + i); // destroy the projectile if it collides
 		}
 
+		
+
 		// Update enemyRow movement
+		
+		// Reduce the speed limit after every increase in enemyRowY (each drop down)
+		// and make the floor 0.
+		enemySpeedLimit = -(enemyRowY * 2) + 12;
+		if (enemySpeedLimit <= 0) enemySpeedLimit = 1;
+
 		// Enemy move logic: Start going right, if you hit the board go down one space then go left, repeat
 		enemyCount += 1;
-		if (enemyCount / 10 == 1) // Have the enemy rows pause, then move
+		if (enemyCount / enemySpeedLimit == 1) // Have the enemy rows pause, then move
 		{
 			enemyCount = 0;
 			if (!enemyInversed)
@@ -221,15 +214,57 @@ int main()
 			}
 		}
 
-		// Display ========================================================================================
 
-		// Update the field
-		UpdateField(&projectiles);
+		// Fire a projectile from the pos of each enemy
+		enemyProjCount++;
+		//if (enemyProjCount == 10) __debugbreak();
+		if (enemyProjCount / enemyProjFireRate == 1)
+		{
+			enemyProjCount = 0;
+			for (int i = 0; i < int(enemyRow.size()); i++)
+			{
+				if (enemyRow[i] == 'X' && std::rand() % 2 == 1) // trigger this condition 1/2 of the time
+				{
+					projectile ep = projectile(enemyRowX + i, enemyRowY, 1);
+					enemyProjectiles.push_back(ep);
+				}
+			}
+		}
+		
+		for (int i = 0; i < int(enemyProjectiles.size()); i++)
+		{
+			if (CanProjectileFit(enemyProjectiles[i].posX, enemyProjectiles[i].posY + 1))
+			{
+				enemyProjectiles[i].posY += enemyProjectiles[i].velocity;
+			}
+			else
+			{
+				enemyProjectiles.erase(enemyProjectiles.begin() + i);
+			}
+		}
+
+		// Display =======================================================================================
 
 		// Draw field 
 		for (int x = 0; x < fieldWidth; x++)
 			for (int y = 0; y < fieldHeight; y++)
 				screen[y * screenWidth + (x + fieldXOffset)] = L" @E#|"[field[y * fieldWidth + x]];
+
+		// Draw the player
+		screen[playerY * screenWidth + (playerX + fieldXOffset)] = '@';
+
+		// Draw the player projectiles
+		for (auto p : projectiles)
+			screen[p.posY * screenWidth + (p.posX + fieldXOffset)] = '|';
+
+		// Draw the enemies
+		for (int ei = 0; ei < int(enemyRow.length()); ei++)
+			if (enemyRow[ei] != '.')
+				screen[enemyRowY * screenWidth + (enemyRowX + ei + fieldXOffset)] = 'E';
+
+		// Draw the enemy projectiles
+		for (auto p : enemyProjectiles)
+			screen[p.posY * screenWidth + (p.posX + fieldXOffset)] = '|';
 
 		// Display frame (Draw everything)
 		WriteConsoleOutputCharacter(console, screen, screenWidth * screenHeight, { 0, 0 }, &bytesWritten);
