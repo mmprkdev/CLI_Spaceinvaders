@@ -4,8 +4,7 @@
 //
 
 // TODO: 
-// - Decrease player projectile rate of fire
-// - add multiple enemy rows
+// - create one large enemy row that is displayed as 5 rows (11 X 5)
 
 #include "stdafx.h"
 #include <windows.h>
@@ -21,15 +20,18 @@ int fieldHeight = 25;         // Playing field size Y
 unsigned char *field = nullptr;
 int playerX = fieldWidth / 2;
 int playerY = fieldHeight - 2;
-wstring enemyRow;
-int enemyRowX = 2;
-int enemyRowY = 2;
-const int enemySpeed = 1;     // NOTE(Matt): changing the enemy speed will mess up the move logic  
+//wstring enemyRow;
+//int enemyRowX = 2;
+//int enemyRowY = 2;
+//const int enemySpeed = 1;     // NOTE(Matt): changing the enemy speed will mess up the move logic  
+//wstring enemyRows[5];
+//int activeEnemyRow = 0;
+//int enemyRowsX = 2;
+//int enemyRowsY = 6;
 int fieldXOffset = 20;		  // offset of the field
 int screenWidth = 80;         // Console screen size X
 int screenHeight = 30;        // Console screen size Y
 wchar_t *screen = new wchar_t[screenWidth * screenHeight];
-
 
 struct projectile
 {
@@ -45,19 +47,34 @@ struct projectile
 	}
 };
 
-void KillEnemy(int posX, int posY)
+struct enemyRow
 {
-	for (int ei = 0; ei < int(enemyRow.length()); ei++)
+	int posX;
+	int posY;
+	int speed;
+	wstring enemies;
+	int enemyCount = 0;
+	bool enemyInversed = false;
+	int enemySpeedLimit = 2;
+
+	enemyRow(int PosX, int PosY, int Speed, wstring Enemies)
 	{
-		int fi = posY * fieldWidth + posX;
-		int enemyRowIndex = enemyRowY * fieldWidth + enemyRowX;
-		enemyRow[fi - enemyRowIndex] = L'.';
+		posX = PosX;
+		posY = PosY;
+		speed = Speed;
+		enemies = Enemies;
 	}
+};
+
+void KillEnemy(int posX, int posY) // TODO
+{
+	int fi = posY * fieldWidth + posX;
+	int enemyRowIndex = enemyRowY * fieldWidth + enemyRowX;
+	enemyRow[fi - enemyRowIndex] = L'.';
 }
 
 bool CanPlayerFit(int posX, int posY)
 {
-	//int fieldIndex = posY * fieldWidth + posX;
 	if (posX >= 0 && posX < fieldWidth)
 		if (posY >= 0 && posY < fieldHeight)
 			if (screen[posY * screenWidth + (posX + fieldXOffset)] != ' ') return false; //if (field[fieldIndex] != 0) return false;
@@ -67,7 +84,6 @@ bool CanPlayerFit(int posX, int posY)
 
 bool CanProjectileFit(int posX, int posY)
 {
-	//int fieldIndex = posY * fieldWidth + posX;
 	if (posX >= 0 && posX < fieldWidth)
 	{
 		if (posY >= 0 && posY < fieldHeight)
@@ -79,6 +95,7 @@ bool CanProjectileFit(int posX, int posY)
 			}
 
 			if (screen[posY * screenWidth + (posX + fieldXOffset)] == '#') return false;
+			if (screen[posY * screenWidth + (posX + fieldXOffset)] == '|') return false;
 		}
 	}
 
@@ -100,8 +117,46 @@ bool CanEnemyFit(int posX, int posY)
 					if (field[fi] == 1 || field[fi] == 3) return false; // Check for collision with boundary or player
 			}
 	}
-
 	return true;
+}
+
+void enemyMove(enemyRow er)
+{
+	//int enemySpeedLimit = 2;
+	// Reduce the speed limit after every increase in enemyRowY (each drop down)
+	// and make the floor 0.
+	er.enemySpeedLimit = -(er.posY * 2) + 12;
+	if (er.enemySpeedLimit <= 0) er.enemySpeedLimit = 1;
+
+	// Enemy move logic: Start going right, if you hit the board go down one space then go left, repeat
+	er.enemyCount += 1;
+	if (er.enemyCount / er.enemySpeedLimit == 1) // Have the enemy rows pause, then move
+	{
+		er.enemyCount = 0;
+		if (!er.enemyInversed)
+		{
+
+			if (CanEnemyFit(er.posX + 1, er.posY))
+				er.posX += er.speed; // move right
+			else
+			{
+				er.enemyInversed = true;
+				if (CanEnemyFit(er.posX, er.posY + 1))
+					er.posY += er.speed; // move down
+			}
+		}
+		else
+		{
+			if (CanEnemyFit(er.posX - 1, er.posY))
+				er.posX -= er.speed; // move left
+			else
+			{
+				er.enemyInversed = false;
+				if (CanEnemyFit(er.posX, er.posY + 1))
+					er.posY += er.speed; // move down
+			}
+		}
+	}
 }
 
 int main()
@@ -110,9 +165,9 @@ int main()
 	bool running = true;
 	vector<projectile> projectiles;
 	int playerProjCount = 0;
-	bool enemyInversed = false;
+	//bool enemyInversed = false;
 	int enemyCount = 0;
-	int enemySpeedLimit = 2;
+	//int enemySpeedLimit = 2;
 	vector<projectile> enemyProjectiles;
 	int enemyProjCount = 0;
 	int enemyProjFireRate = 10;
@@ -123,7 +178,16 @@ int main()
 	SetConsoleActiveScreenBuffer(console);
 	DWORD bytesWritten = 0;
 
+	// Create enemy rows
+	//enemyRow er1 = enemyRow(2, 2, 1, L"XXXXXXXXXXX");
+	
 	enemyRow = L"XXXXXXXXXXX";
+
+	/*enemyRows[0] = L"XXXXXXXXXXX";
+	enemyRows[1] = L"XXXXXXXXXXX";
+	enemyRows[2] = L"XXXXXXXXXXX";
+	enemyRows[3] = L"XXXXXXXXXXX";
+	enemyRows[4] = L"XXXXXXXXXXX";*/
 
 	// Create playfield buffer
 	field = new unsigned char[fieldWidth * fieldHeight];
@@ -179,45 +243,45 @@ int main()
 
 		// Update enemyRow movement
 		
-		// Reduce the speed limit after every increase in enemyRowY (each drop down)
-		// and make the floor 0.
-		enemySpeedLimit = -(enemyRowY * 2) + 12;
-		if (enemySpeedLimit <= 0) enemySpeedLimit = 1;
+		//// Reduce the speed limit after every increase in enemyRowY (each drop down)
+		//// and make the floor 0.
+		//
+		//enemySpeedLimit = -(enemyRowY * 2) + 12;
+		//if (enemySpeedLimit <= 0) enemySpeedLimit = 1;
 
-		// Enemy move logic: Start going right, if you hit the board go down one space then go left, repeat
-		enemyCount += 1;
-		if (enemyCount / enemySpeedLimit == 1) // Have the enemy rows pause, then move
-		{
-			enemyCount = 0;
-			if (!enemyInversed)
-			{
+		//// Enemy move logic: Start going right, if you hit the board go down one space then go left, repeat
+		//enemyCount += 1;
+		//if (enemyCount / enemySpeedLimit == 1) // Have the enemy rows pause, then move
+		//{
+		//	enemyCount = 0;
+		//	if (!enemyInversed)
+		//	{
 
-				if (CanEnemyFit(enemyRowX + 1, enemyRowY))
-					enemyRowX += enemySpeed; // move right
-				else
-				{
-					enemyInversed = true;
-					if (CanEnemyFit(enemyRowX, enemyRowY + 1))
-						enemyRowY += enemySpeed; // move down
-				}
-			}
-			else
-			{
-				if (CanEnemyFit(enemyRowX - 1, enemyRowY))
-					enemyRowX -= enemySpeed; // move left
-				else
-				{
-					enemyInversed = false;
-					if (CanEnemyFit(enemyRowX, enemyRowY + 1))
-						enemyRowY += enemySpeed; // move down
-				}
-			}
-		}
+		//		if (CanEnemyFit(enemyRowX + 1, enemyRowY))
+		//			enemyRowX += enemySpeed; // move right
+		//		else
+		//		{
+		//			enemyInversed = true;
+		//			if (CanEnemyFit(enemyRowX, enemyRowY + 1))
+		//				enemyRowY += enemySpeed; // move down
+		//		}
+		//	}
+		//	else
+		//	{
+		//		if (CanEnemyFit(enemyRowX - 1, enemyRowY))
+		//			enemyRowX -= enemySpeed; // move left
+		//		else
+		//		{
+		//			enemyInversed = false;
+		//			if (CanEnemyFit(enemyRowX, enemyRowY + 1))
+		//				enemyRowY += enemySpeed; // move down
+		//		}
+		//	}
+		//}
 
 
-		// Fire a projectile from the pos of each enemy
+		// Fire a projectile from the pos of each enemy. Only the first enemy row should fire projectiles
 		enemyProjCount++;
-		//if (enemyProjCount == 10) __debugbreak();
 		if (enemyProjCount / enemyProjFireRate == 1)
 		{
 			enemyProjCount = 0;
